@@ -1,0 +1,29 @@
+{
+  "name": "@fabric/matrix",
+  "version": "0.1.0-dev",
+  "description": "Matrix connectivity for Fabric.",
+  "main": "scripts/agent.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FabricLabs/fabric-service-matrix.git"
+  },
+  "keywords": [
+    "fabric",
+    "bitcoin",
+    "matrix",
+    "chat",
+    "p2p"
+  ],
+  "author": "Fabric Labs",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FabricLabs/fabric-service-matrix/issues"
+  },
+  "homepage": "https://github.com/FabricLabs/fabric-service-matrix#readme",
+  "dependencies": {
+    "matrix-js-sdk": "github:martindale/matrix-js-sdk#silent-logger"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@fabric/matrix",
+  "matrix": {
+    "homeserver": "https://chat.fabric.pub",
+    "coordinator": "!pPjIUAOkwmgXeICrzT:fabric.pub"
+  }
+}
