@@ -1,0 +1,11 @@
+{
+  "name": "@fabric/core",
+  "description": "Application Resource Contract for the Fabric Execution Environment.",
+  "language": "english",
+  "network": "playnet",
+  "key": {
+    "seed": "letter drastic census knock shield matter crime demand gloom echo romance lizard zebra deliver baby key tackle fire update please sketch coconut balance able"
+  },
+  "stack": [],
+  "state": {}
+}

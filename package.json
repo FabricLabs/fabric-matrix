@@ -4,7 +4,8 @@
   "description": "Matrix connectivity for Fabric.",
   "main": "scripts/agent.js",
   "scripts": {
-    "test": "mocha"
+    "start": "node scripts/agent.js",
+    "test": "mocha tests"
   },
   "repository": {
     "type": "git",
@@ -25,5 +26,8 @@
   "homepage": "https://github.com/FabricLabs/fabric-service-matrix#readme",
   "dependencies": {
     "matrix-js-sdk": "github:martindale/matrix-js-sdk#silent-logger"
+  },
+  "devDependencies": {
+    "eslint": "^7.30.0"
   }
 }

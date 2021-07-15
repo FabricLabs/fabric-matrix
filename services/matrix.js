@@ -70,8 +70,7 @@ class Matrix extends Service {
    * Getter for {@link State}.
    */
   get state () {
-    // TODO: remove old use of `@data` while internal to Fabric
-    return this._state['@data'];
+    return this._state;
   }
 
   async _handleException (exception) {
@@ -122,49 +121,49 @@ class Matrix extends Service {
       let registration = null;
 
       try {
-        this.emit('message', `Checking availability: ${actor.pubkey}`);
+        this.emit('log', `Checking availability: ${actor.pubkey}`);
         available = await this._checkUsernameAvailable(actor.pubkey);
-        this.emit('message', Message.fromVector(['OracleBoolean', available]));
+        this.emit('log', Message.fromVector(['OracleBoolean', available]));
       } catch (exception) {
         this.emit('error', `Could not check availability: ${exception}`);
       }
 
       if (available) {
         try {
-          this.emit('message', `Trying registration: ${actor.pubkey}`);
+          this.emit('log', `Trying registration: ${actor.pubkey}`);
           registration = await this.register(actor.pubkey, actor.privkeyhash || password);
-          this.emit('message', `Registration: ${registration}`);
+          this.emit('log', `Registration: ${registration}`);
         } catch (exception) {
           this.emit('error', `Could not register with coordinator: ${exception}`);
         }
       }
 
       try {
-        this.emit('message', `Trying login: ${actor.pubkey}`);
+        this.emit('log', `Trying login: ${actor.pubkey}`);
         await this.login(actor.pubkey, actor.privkeyhash || password);
       } catch (exception) {
         this.emit('error', `Could not authenticate with coordinator: ${exception}`);
       }
 
       try {
-        this.emit('message', `Trying join room: ${this.settings.coordinator}`);
+        this.emit('log', `Trying join room: ${this.settings.coordinator}`);
         await this.client.joinRoom(this.settings.coordinator);
       } catch (exception) {
         this.emit('error', `Could not join coordinator: ${exception}`);
       }
 
-      let result = await this._setState({
+      const result = await this._setState({
         content: 'Hello, world!'
       });
 
-      this.emit('message', {
+      this.emit('log', {
         actor: actor.pubkey,
         object: result.event_id,
         target: '/messages'
       });
     }
 
-    this.emit('message', `Actor Registered: ${actor.id} ${JSON.stringify(actor.data, null, '  ')}`);
+    this.log('message', `Actor Registered: ${actor.id} ${JSON.stringify(actor.data, null, '  ')}`);
 
     return actor.data;
   }
@@ -195,7 +194,7 @@ class Matrix extends Service {
     if (!password) throw new Error('Must provide password.');
     const self = this;
     const promise = new Promise((resolve, reject) => {
-      self.emit('message', `Trying registration: ${username}:${password}`);
+      self.emit('log', `Trying registration: ${username}:${password}`);
       self.client.registerRequest({
         username: username,
         password: password,
@@ -209,7 +208,7 @@ class Matrix extends Service {
   async _checkUsernameAvailable (username) {
     const self = this;
     const promise = new Promise(async (resolve, reject) => {
-      self.emit('message', `Checking username: ${username}`);
+      self.emit('log', `Checking username: ${username}`);
       self.client.isUsernameAvailable(username).catch((exception) => {
         resolve(false);
       }).then((result) => {
@@ -224,7 +223,7 @@ class Matrix extends Service {
       return; // only use messages
     }
 
-    this.emit('message', {
+    this.emit('log', {
       actor: msg.event.sender,
       object: {
         content: msg.event.content.body
@@ -239,16 +238,19 @@ class Matrix extends Service {
    */
   async start () {
     this.status = 'STARTING';
-    this.emit('message', '[SERVICES:MATRIX] Starting...');
+    this.emit('log', '[SERVICES:MATRIX] Starting...');
+
     const service = this;
     const user = {
       pubkey: (service.settings.username) ? service.settings.username : this.key.pubkey,
       password: service.settings.password
     };
 
+    this.emit('log', '[SERVICES:MATRIX]', 'User:', user);
+
     this.client.once('sync', function _handleClientSync (state, prevState, res) {
       if (state === 'PREPARED') {
-        service.emit('message', Message.fromVector(['MatrixClientSync', {
+        service.emit('log', Message.fromVector(['MatrixClientSync', {
           state: state
         }]));
       } else {
@@ -261,7 +263,7 @@ class Matrix extends Service {
     this.client.on('Room.timeline', function _handleRoomTimeline (event, room, toStartOfTimeline) {
       if (event.getType() !== 'm.room.message') return;
       const actor = new Actor({ name: event.event.sender });
-      service.emit('message', {
+      service.emit('log', {
         actor: actor.id,
         object: {
           type: 'MatrixEvent',
@@ -275,7 +277,7 @@ class Matrix extends Service {
     if (this.settings.connect) await this.client.startClient({ initialSyncLimit: 10 });
 
     this.status = 'STARTED';
-    this.emit('message', '[SERVICES:MATRIX] Started!');
+    this.emit('log', '[SERVICES:MATRIX] Started!');
     // this.log('[SERVICES:MATRIX]', 'Started!');
   }
 
