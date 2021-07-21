@@ -1,5 +1,5 @@
 {
-  "name": "@fabric/core",
+  "name": "@fabric/playnet",
   "description": "Application Resource Contract for the Fabric Execution Environment.",
   "language": "english",
   "network": "playnet",

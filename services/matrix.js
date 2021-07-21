@@ -4,18 +4,11 @@
 const matrix = require('matrix-js-sdk');
 
 // Fabric Types
-const HKDF = require('@fabric/core/types/hkdf');
-const Entity = require('@fabric/core/types/entity');
-// TODO: compare API against {@link Service}
-const Service = require('@fabric/core/types/service');
+const Key = require('@fabric/core/types/key');
 const Actor = require('@fabric/core/types/actor');
+const Hash256 = require('@fabric/core/types/hash256');
+const Service = require('@fabric/core/types/service');
 const Message = require('@fabric/core/types/message');
-
-// Local Values
-const COORDINATORS = [
-  // TODO: supply at least 7 coordinators
-  '!pPjIUAOkwmgXeICrzT:fabric.pub' // Primary Coordinator
-];
 
 /**
  * Service for interacting with Matrix.
@@ -26,6 +19,8 @@ class Matrix extends Service {
    * Create an instance of a Matrix client, connect to the
    * network, and relay messages received from therein.
    * @param {Object} [settings] Configuration values.
+   * @param {String} [settings.seed] BIP39 seed phrase.
+   * @param {String} [settings.password] Password for authentication with Matrix.
    */
   constructor (settings = {}) {
     super(settings);
@@ -35,29 +30,36 @@ class Matrix extends Service {
       name: '@fabric/matrix',
       path: './stores/matrix',
       homeserver: 'https://fabric.pub',
-      coordinator: COORDINATORS[0],
-      connect: false
+      coordinator: '!pPjIUAOkwmgXeICrzT:fabric.pub',
+      trigger: '!',
+      connect: true
     }, this.settings, settings);
 
+    // Client & Key
     this.client = matrix.createClient(this.settings.homeserver);
+    this.key = new Key(this.settings);
+
+    // Internal State
     this._state = {
       status: 'READY',
       actors: {},
-      channels: COORDINATORS,
-      messages: {}
+      channels: {},
+      messages: {},
+      users: {},
+      validators: {}
     };
 
     return this;
   }
 
   get status () {
-    return this._state[`status`];
+    return this._state.status;
   }
 
   set status (value = this.status) {
     switch (value) {
       case 'READY':
-        this._state[`status`] = value;
+        this._state.status = value;
         break;
       default:
         return false;
@@ -73,30 +75,30 @@ class Matrix extends Service {
     return this._state;
   }
 
+  get statehash () {
+    return (new Actor(this.state)).id;
+  }
+
   async _handleException (exception) {
     console.error('[SERVICES:MATRIX]', 'Exception:', exception);
   }
 
-  async _setState (state) {
-    const entity = new Entity(state);
-    const content = {
-      '@id': entity.id,
-      '@data': state,
-      'state_key': 'fabric.services.matrix'
-    };
-
-    const promise = new Promise((resolve, reject) => {
-      this.client.sendEvent(this.settings.coordinator, 'm.room.state', content, '', (err, res) => {
-        if (err) return reject(err);
-        return resolve(res);
-      });
-    });
-
-    return promise;
+  async _listPublicRooms () {
+    const rooms = await this.client.publicRooms();
+    return rooms;
   }
 
-  async _listPublicRooms () {
-    let rooms = await this.client.publicRooms();
+  async _queryServerForRoomUsers () {
+    const room = await this.client.getRoom(this.settings.coordinator);
+    if (room && room.currentState) {
+      return room.currentState.members;
+    } else {
+      return null;
+    }
+  }
+
+  async _syncPublicRooms () {
+    const rooms = await this.client.publicRooms();
     return rooms;
   }
 
@@ -107,40 +109,51 @@ class Matrix extends Service {
    */
   async _registerActor (object) {
     if (!object.pubkey) throw new Error('Field "pubkey" is required.');
-    const actor = new Actor(object);
-    this._state.actors[actor.id] = actor.toObject();
 
+    // ### The Canonical Actor
+    // The current method of deriving actor IDs is deterministic, with IDs
+    // bound to the actor's public key.  No additional data is captured.
+    const actor = new Actor({ pubkey: object.pubkey });
+    const memory = Object.assign({}, object);
+
+    if (object.password) delete memory.password;
+
+    // First, add the actor to our local state:
+    this._state.actors[actor.id] = memory;
+
+    // Next, determine if a connection should be made:
+    // TODO: reduce and simplify this entire path
     if (this.settings.connect) {
-      const hmac = new HKDF({
-        initial: 'f00b4r',
-        salt: actor.privkeyhash
-      });
+      // Assign some mapped values for Matrix:
+      const username = actor.key.public.encodeCompressed('hex');
+      const hashpass = Hash256.digest(Hash256.digest(this.key.private.toString()));
+      const password = object.password || hashpass;
 
-      let password = actor.password || hmac.derive().toString('hex');
+      // BEGIN: REGISTRATION / LOGIN FLOW
       let available = false;
       let registration = null;
 
       try {
-        this.emit('log', `Checking availability: ${actor.pubkey}`);
-        available = await this._checkUsernameAvailable(actor.pubkey);
-        this.emit('log', Message.fromVector(['OracleBoolean', available]));
+        this.emit('log', `Checking availability: ${username}`);
+        available = await this._checkUsernameAvailable(username);
+        this.emit('message', Message.fromVector(['OracleBoolean', available]));
       } catch (exception) {
         this.emit('error', `Could not check availability: ${exception}`);
       }
 
       if (available) {
         try {
-          this.emit('log', `Trying registration: ${actor.pubkey}`);
-          registration = await this.register(actor.pubkey, actor.privkeyhash || password);
-          this.emit('log', `Registration: ${registration}`);
+          this.emit('log', `Trying registration: ${username}`);
+          registration = await this.register(username, password);
+          this.emit('log', 'Registration:', registration);
         } catch (exception) {
           this.emit('error', `Could not register with coordinator: ${exception}`);
         }
       }
 
       try {
-        this.emit('log', `Trying login: ${actor.pubkey}`);
-        await this.login(actor.pubkey, actor.privkeyhash || password);
+        this.emit('log', `Trying login: ${username}`);
+        await this.login(username, password);
       } catch (exception) {
         this.emit('error', `Could not authenticate with coordinator: ${exception}`);
       }
@@ -151,19 +164,17 @@ class Matrix extends Service {
       } catch (exception) {
         this.emit('error', `Could not join coordinator: ${exception}`);
       }
+      // END: REGISTRATION / LOGIN FLOW
 
-      const result = await this._setState({
-        content: 'Hello, world!'
-      });
-
-      this.emit('log', {
-        actor: actor.pubkey,
+      /* this.emit('log', {
+        actor: username,
         object: result.event_id,
         target: '/messages'
-      });
+      }); */
     }
 
     this.log('message', `Actor Registered: ${actor.id} ${JSON.stringify(actor.data, null, '  ')}`);
+    this.emit('actor', actor.id);
 
     return actor.data;
   }
@@ -172,8 +183,8 @@ class Matrix extends Service {
     const service = this;
 
     const content = {
-      'body': (msg && msg.object) ? msg.object.content : msg.object,
-      'msgtype': 'm.text'
+      body: (msg && msg.object) ? msg.object.content : msg.object,
+      msgtype: 'm.text'
     };
 
     try {
@@ -207,7 +218,7 @@ class Matrix extends Service {
 
   async _checkUsernameAvailable (username) {
     const self = this;
-    const promise = new Promise(async (resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
       self.emit('log', `Checking username: ${username}`);
       self.client.isUsernameAvailable(username).catch((exception) => {
         resolve(false);
@@ -232,6 +243,63 @@ class Matrix extends Service {
     });
   }
 
+  _handleClientSync (status, prevState, res) {
+    if (status === 'PREPARED') {
+      this.emit('message', Message.fromVector(['MatrixClientSync', {
+        created: (new Date()).toISOString(),
+        status: status
+      }]));
+      this.emit('prepared', status);
+    } else {
+      this.emit('error', Message.fromVector(['GenericError', {
+        message: `Unhandled sync event state: ${status}`
+      }]));
+      process.exit();
+    }
+  }
+
+  async _handleRoomTimeline (event, room, toStartOfTimeline) {
+    this.emit('log', 'Matrix Timeline Event:', event);
+    if (event.getType() !== 'm.room.message') return;
+
+    const actor = this._ensureUser({ id: event.event.sender });
+    await this._syncState();
+
+    this.emit('activity', {
+      actor: actor.id,
+      object: {
+        type: 'MatrixEvent',
+        data: event.event
+      },
+      target: '/messages'
+    });
+  }
+
+  _ensureUser (user) {
+    const actor = new Actor({ id: user.id });
+    this._state.actors[actor.id] = actor.data;
+    this._state.users[user.id] = {
+      actor: actor.id
+    };
+    return actor;
+  }
+
+  async _syncState () {
+    const event = await this._publishState(this.state);
+    return {
+      event: event.event_id
+    };
+  }
+
+  async _handlePreparedEvent (status) {
+    await this._syncState();
+  }
+
+  async _publishState (state) {
+    // TODO: read room state before publishing
+    return this.client.sendEvent(this.settings.coordinator, 'm.room.state', state);
+  }
+
   /**
    * Start the service, including the initiation of an outbound connection
    * to any peers designated in the service's configuration.
@@ -246,34 +314,13 @@ class Matrix extends Service {
       password: service.settings.password
     };
 
-    this.emit('log', '[SERVICES:MATRIX]', 'User:', user);
+    this.client.once('sync', this._handleClientSync.bind(service));
+    this.client.on('Room.timeline', this._handleRoomTimeline.bind(service));
 
-    this.client.once('sync', function _handleClientSync (state, prevState, res) {
-      if (state === 'PREPARED') {
-        service.emit('log', Message.fromVector(['MatrixClientSync', {
-          state: state
-        }]));
-      } else {
-        service.emit('error', Message.fromVector(['GenericError', {
-          message: `Unhandled sync event state: ${state}`
-        }]));
-      }
-    });
-
-    this.client.on('Room.timeline', function _handleRoomTimeline (event, room, toStartOfTimeline) {
-      if (event.getType() !== 'm.room.message') return;
-      const actor = new Actor({ name: event.event.sender });
-      service.emit('log', {
-        actor: actor.id,
-        object: {
-          type: 'MatrixEvent',
-          data: event.event
-        },
-        target: '/messages'
-      });
-    });
+    this.on('prepared', this._handlePreparedEvent.bind(service));
 
     await this._registerActor(user);
+
     if (this.settings.connect) await this.client.startClient({ initialSyncLimit: 10 });
 
     this.status = 'STARTED';

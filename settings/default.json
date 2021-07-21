@@ -1,7 +1,8 @@
 {
   "name": "@fabric/matrix",
-  "matrix": {
-    "homeserver": "https://chat.fabric.pub",
-    "coordinator": "!pPjIUAOkwmgXeICrzT:fabric.pub"
-  }
+  "handle": "services/matrix",
+  "connect": true,
+  "homeserver": "https://chat.fabric.pub",
+  "coordinator": "!pPjIUAOkwmgXeICrzT:fabric.pub",
+  "password": ""
 }
