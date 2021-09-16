@@ -2,7 +2,7 @@
   "name": "@fabric/matrix",
   "version": "0.1.0-dev",
   "description": "Matrix connectivity for Fabric.",
-  "main": "scripts/agent.js",
+  "main": "services/matrix.js",
   "scripts": {
     "start": "node scripts/agent.js",
     "test": "mocha tests"
