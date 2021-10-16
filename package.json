@@ -25,7 +25,7 @@
   },
   "homepage": "https://github.com/FabricLabs/fabric-service-matrix#readme",
   "dependencies": {
-    "matrix-js-sdk": "github:martindale/matrix-js-sdk#silent-logger"
+    "matrix-js-sdk": "FabricLabs/matrix-js-sdk#silent-logger"
   },
   "devDependencies": {
     "eslint": "^7.30.0"
