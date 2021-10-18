@@ -1,7 +1,7 @@
 'use strict';
 
 // Dependencies
-const matrix = require('matrix-js-sdk');
+const matrix = require('matrix-js-sdk').default;
 
 // Fabric Types
 const Key = require('@fabric/core/types/key');
@@ -240,6 +240,12 @@ class Matrix extends Service {
   async _handleMatrixMessage (msg) {
     const actor = this._ensureUser({ id: msg.event.sender });
     switch (msg.getType()) {
+      case 'm.room.redaction':
+        break;
+      case 'm.room.member':
+        // TODO: check actors
+        this.emit('log', `[MATRIX] Membership Event: ${JSON.stringify(msg.event, null, '  ')}`);
+        break;
       case 'm.room.message':
         this.emit('activity', {
           actor: actor.id,
@@ -248,6 +254,14 @@ class Matrix extends Service {
           },
           target: '/messages'
         });
+        break;
+      case 'm.reaction':
+        // TODO: check actors
+        this.emit('log', `[MATRIX] Membership Event: ${JSON.stringify(msg.event, null, '  ')}`);
+        break;
+      case 'm.room.state':
+        // TODO: check actors
+        this.emit('log', `[MATRIX] Membership Event: ${JSON.stringify(msg.event, null, '  ')}`);
         break;
       default:
         this.emit('warning', `Unhandled Matrix message type: ${msg.getType()}`);
@@ -273,14 +287,7 @@ class Matrix extends Service {
   async _handleRoomTimeline (event, room, toStartOfTimeline) {
     this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
     const actor = this._ensureUser({ id: event.event.sender });
-    switch (event.getType()) {
-      case 'm.room.message':
-        await this._syncState();
-        break;
-      default:
-        this.emit('warning', `Unhandled Matrix message type: ${event.getType()}`);
-        break;
-    }
+    await this._handleMatrixMessage(event);
   }
 
   _ensureUser (user) {
@@ -314,6 +321,11 @@ class Matrix extends Service {
     console.log('state:', current);
     console.log('search:', search); */
     // return this.client.sendEvent(this.settings.coordinator, 'm.room.state', state);
+  }
+
+  async commit () {
+    const commit = new Actor(this._state);
+    this.emit('audit', `[MATRIX] Commit: ${commit.toString}`);
   }
 
   /**
