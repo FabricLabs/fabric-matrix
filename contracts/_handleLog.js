@@ -1,3 +1,3 @@
-module.exports = async function _handleError (...data) {
-  console.error((new Date()).toISOString(), ...data);
+module.exports = async function _handleLog (...data) {
+  console.log((new Date()).toISOString(), ...data);
 };

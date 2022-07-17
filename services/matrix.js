@@ -133,9 +133,10 @@ class Matrix extends Service {
     // TODO: reduce and simplify this entire path
     if (this.settings.connect) {
       // Assign some mapped values for Matrix:
-      const username = actor.key.public.encodeCompressed('hex');
+      const username = object.pubkey;
+      // NOTE: this is NOT the actor's private key
       const hashpass = Hash256.digest(Hash256.digest(this.key.private.toString()));
-      const password = object.password || hashpass;
+      const password = object.password || hashpass; // falls back to hashpass
 
       // BEGIN: REGISTRATION / LOGIN FLOW
       let available = false;
@@ -211,17 +212,21 @@ class Matrix extends Service {
   async register (username, password) {
     if (!username) throw new Error('Must provide username.');
     if (!password) throw new Error('Must provide password.');
-    const self = this;
-    const promise = new Promise((resolve, reject) => {
-      self.emit('log', `Trying registration: ${username}:${password}`);
-      self.client.registerRequest({
+    this.emit('log', `Trying registration: ${username}:${password}`);
+
+    let result = null;
+
+    try {
+      result = await this.client.registerRequest({
         username: username,
         password: password,
-        auth: { type: 'm.login.dummy' }
-      }).catch(reject).then(resolve);
-    });
+        // auth: { type: 'm.login.dummy' }
+      });
+    } catch (exception) {
+      console.error('no reg:', exception);
+    }
 
-    return promise;
+    return result;
   }
 
   async _checkUsernameAvailable (username) {
