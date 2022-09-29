@@ -4,6 +4,9 @@
   "description": "Matrix connectivity for Fabric.",
   "main": "services/matrix.js",
   "scripts": {
+    "coverage": "c8 npm test",
+    "make:coverage": "npm run coverage && c8 report --reporter html",
+    "report:coverage": "npm run make:coverage && c8 report --reporter=text-lcov > reports/coverage.lcov",
     "start": "node scripts/agent.js",
     "test": "mocha tests"
   },
