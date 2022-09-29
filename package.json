@@ -29,7 +29,6 @@
     "matrix-js-sdk": "17.1.0"
   },
   "devDependencies": {
-    "eslint": "7.30.0",
-    "mocha": "9.2.2"
+    "mocha": "10.0.0"
   }
 }
