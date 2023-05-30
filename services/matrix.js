@@ -27,16 +27,23 @@ class Matrix extends Service {
 
     // Assign defaults
     this.settings = Object.assign({
+      alias: 'FABRIC',
+      handle: '@fabric:fabric.pub',
       name: '@fabric/matrix',
       path: './stores/matrix',
       homeserver: 'https://fabric.pub',
       coordinator: '!pPjIUAOkwmgXeICrzT:fabric.pub',
-      trigger: '!',
+      token: null,
       connect: true
     }, this.settings, settings);
 
     // Client & Key
-    this.client = matrix.createClient(this.settings.homeserver);
+    this.client = matrix.createClient({
+      baseUrl: this.settings.homeserver,
+      accessToken: this.settings.token,
+      userId: this.settings.handle
+    });
+
     this.key = new Key(this.settings);
 
     // Internal State
@@ -329,24 +336,30 @@ class Matrix extends Service {
     this.status = 'STARTING';
     this.emit('log', '[SERVICES:MATRIX] Starting...');
 
-    const service = this;
     const user = {
-      pubkey: (service.settings.username) ? service.settings.username : this.key.pubkey,
-      password: service.settings.password
+      pubkey: (this.settings.username) ? this.settings.username : this.key.pubkey,
+      password: this.settings.password
     };
 
-    this.client.once('sync', this._handleClientSync.bind(service));
-    this.client.on('Room.timeline', this._handleRoomTimeline.bind(service));
 
-    this.on('prepared', this._handlePreparedEvent.bind(service));
+    this.client.once('sync', this._handleClientSync.bind(this));
+    this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
 
-    await this._registerActor(user);
+    this.on('activity', this._handleMatrixActivity.bind(this));
+    this.on('prepared', this._handlePreparedEvent.bind(this));
 
-    if (this.settings.connect) await this.client.startClient({ initialSyncLimit: 10 });
+    // await this._registerActor(user);
+
+    if (this.settings.connect) {
+      await this.client.startClient({ initialSyncLimit: 10 });
+      await this.client.joinRoom(this.settings.coordinator);
+    }
 
     this.status = 'STARTED';
     this.emit('log', '[SERVICES:MATRIX] Started!');
     // this.log('[SERVICES:MATRIX]', 'Started!');
+
+    return this;
   }
 
   /**
@@ -357,6 +370,8 @@ class Matrix extends Service {
     // this.log('[SERVICES:MATRIX]', 'Stopping...');
     this.status = 'STOPPED';
     // this.log('[SERVICES:MATRIX]', 'Stopped!');
+
+    return this;
   }
 }
 
