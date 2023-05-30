@@ -1,15 +1,18 @@
 {
   "name": "@fabric/matrix",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "description": "Matrix connectivity for Fabric.",
   "main": "services/matrix.js",
   "scripts": {
+    "coverage": "c8 npm test",
+    "make:coverage": "npm run coverage && c8 report --reporter html",
+    "report:coverage": "npm run make:coverage && c8 report --reporter=text-lcov > reports/coverage.lcov",
     "start": "node scripts/agent.js",
     "test": "mocha tests"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FabricLabs/fabric-service-matrix.git"
+    "url": "git+https://github.com/FabricLabs/fabric-matrix.git"
   },
   "keywords": [
     "fabric",
@@ -21,15 +24,14 @@
   "author": "Fabric Labs",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/FabricLabs/fabric-service-matrix/issues"
+    "url": "https://github.com/FabricLabs/fabric-matrix/issues"
   },
-  "homepage": "https://github.com/FabricLabs/fabric-service-matrix#readme",
+  "homepage": "https://github.com/FabricLabs/fabric-matrix#readme",
   "dependencies": {
-    "matrix-js-sdk": "^17.1.0"
+    "@fabric/core": "FabricLabs/fabric#master",
+    "matrix-js-sdk": "17.1.0"
   },
   "devDependencies": {
-    "eslint": "^7.30.0",
-    "mocha": "^9.2.2",
-    "nyc": "^15.1.0"
+    "mocha": "10.0.0"
   }
 }

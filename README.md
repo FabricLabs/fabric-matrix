@@ -1,4 +1,4 @@
-# `@fabric/services/matrix`
+# `@fabric/matrix`
 Implements a Fabric Service Definition for [Matrix][matrix-org].
 
 ## Quick Start
