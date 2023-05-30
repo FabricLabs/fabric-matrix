@@ -59,6 +59,11 @@ class Matrix extends Service {
     return this;
   }
 
+  get id () {
+    const actor = this._ensureUser({ id: this.settings.handle });
+    return actor.id;
+  }
+
   get status () {
     return this._state.status;
   }
@@ -115,6 +120,28 @@ class Matrix extends Service {
   async _syncPublicRooms () {
     const rooms = await this.client.publicRooms();
     return rooms;
+  }
+
+  async _react (eventID, emoji) {
+    const reactionContent = {
+      'm.relates_to': {
+        'rel_type': 'm.annotation',
+        'event_id': eventID,
+        'key': emoji
+      }
+    };
+
+    const result = await this.client.sendEvent(this.settings.coordinator, 'm.reaction', reactionContent);
+
+    return {
+      object: {
+        id: result.event_id
+      }
+    };
+  }
+
+  async _redact (eventID) {
+    this.client.redactEvent(this.settings.coordinator, eventID);
   }
 
   /**
@@ -196,20 +223,16 @@ class Matrix extends Service {
   }
 
   async _send (msg) {
-    const service = this;
-
     const content = {
       body: (msg && msg.object) ? msg.object.content : msg.object,
       msgtype: 'm.text'
     };
 
-    try {
-      this.client.sendEvent(this.settings.coordinator, 'm.room.message', content, '', (err, res) => {
-        if (err) return service.emit('error', `Could not send message to service: ${err}`);
-      });
-    } catch (exception) {
-      this.emit('error', `Could not send message: ${exception}`);
-    }
+    const result = await this.client.sendEvent(this.settings.coordinator, 'm.room.message', content, '');
+
+    return {
+      matrix: result
+    };
   }
 
   async login (username, password) {
@@ -249,6 +272,10 @@ class Matrix extends Service {
     return promise;
   }
 
+  async _handleMatrixActivity (activity) {
+    // console.log('activity:', activity);
+  }
+
   async _handleMatrixMessage (msg) {
     const actor = this._ensureUser({ id: msg.event.sender });
     switch (msg.getType()) {
@@ -258,7 +285,7 @@ class Matrix extends Service {
           object: {
             content: msg.event.content.body
           },
-          target: '/messages'
+          target: `/rooms/${msg.event.room_id}`
         });
         break;
       default:
@@ -268,7 +295,7 @@ class Matrix extends Service {
   }
 
   _handleClientSync (status, prevState, res) {
-    if (status === 'PREPARED') {
+    if (status.trim() === 'PREPARED') {
       this.emit('message', Message.fromVector(['MatrixClientSync', {
         created: (new Date()).toISOString(),
         status: status
@@ -288,6 +315,13 @@ class Matrix extends Service {
     switch (event.getType()) {
       case 'm.room.message':
         await this._syncState();
+        this.emit('activity', {
+          actor: actor.id,
+          object: {
+            id: event.event.event_id,
+            content: event.event.content.body
+          }
+        });
         break;
       default:
         this.emit('warning', `Unhandled Matrix message type: ${event.getType()}`);
@@ -312,6 +346,7 @@ class Matrix extends Service {
   }
 
   async _handlePreparedEvent (status) {
+    this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
     await this._syncState();
   }
 
@@ -341,12 +376,12 @@ class Matrix extends Service {
       password: this.settings.password
     };
 
-
     this.client.once('sync', this._handleClientSync.bind(this));
-    this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
 
     this.on('activity', this._handleMatrixActivity.bind(this));
     this.on('prepared', this._handlePreparedEvent.bind(this));
+
+    // this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
 
     // await this._registerActor(user);
 
