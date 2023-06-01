@@ -178,6 +178,7 @@ class Matrix extends Service {
   }
 
   async _react (eventID, emoji) {
+    const event = await this._getEvent(eventID);
     const reactionContent = {
       'm.relates_to': {
         'rel_type': 'm.annotation',
@@ -186,7 +187,7 @@ class Matrix extends Service {
       }
     };
 
-    const result = await this.client.sendEvent(this.settings.coordinator, 'm.reaction', reactionContent);
+    const result = await this.client.sendEvent(event.event.room_id, 'm.reaction', reactionContent);
 
     return {
       object: {
@@ -196,7 +197,8 @@ class Matrix extends Service {
   }
 
   async _redact (eventID) {
-    this.client.redactEvent(this.settings.coordinator, eventID);
+    const event = await this._getEvent(eventID);
+    this.client.redactEvent(event.event.room_id, eventID);
   }
 
   /**
