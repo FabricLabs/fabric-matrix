@@ -105,6 +105,11 @@ class Matrix extends Service {
     });
   }
 
+  async _getAgentDisplayName () {
+    const user = await this.client.getProfileInfo(this.settings.handle);
+    return user.displayname;
+  }
+
   async _getEvent (eventID) {
     let rooms = this.client.getRooms();
     let specificEvent = null;
@@ -290,6 +295,10 @@ class Matrix extends Service {
     return {
       matrix: result
     };
+  }
+
+  async _setAgentDisplayName (name) {
+    return this.client.setDisplayName(name);
   }
 
   async login (username, password) {
