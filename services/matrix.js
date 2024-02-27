@@ -159,6 +159,11 @@ class Matrix extends Service {
     return reactions;
   }
 
+  async _getRoomMembers (roomID) {
+    const rooms = this.client.getJoinedRooms();
+    return rooms;
+  }
+
   async _handleException (exception) {
     console.error('[SERVICES:MATRIX]', 'Exception:', exception);
   }
@@ -376,6 +381,8 @@ class Matrix extends Service {
   }
 
   async _handleRoomTimeline (event, room, toStartOfTimeline) {
+    // console.log('timeline event:', event.event, room);
+    // this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
     const actor = this._ensureUser({ id: event.event.sender });
     switch (event.getType()) {
       case 'm.room.message':
