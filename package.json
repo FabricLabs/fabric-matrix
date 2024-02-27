@@ -7,6 +7,7 @@
     "coverage": "c8 npm test",
     "make:coverage": "npm run coverage && c8 report --reporter html",
     "report:coverage": "npm run make:coverage && c8 report --reporter=text-lcov > reports/coverage.lcov",
+    "report:install": "rm -rf node_modules && echo \"\n\" > package-lock.json && echo \"$ npm i\" > reports/install.log && npm i >> reports/install.log",
     "start": "node scripts/agent.js",
     "test": "mocha tests"
   },
@@ -28,8 +29,8 @@
   },
   "homepage": "https://github.com/FabricLabs/fabric-matrix#readme",
   "dependencies": {
-    "@fabric/core": "FabricLabs/fabric#master",
-    "matrix-js-sdk": "17.1.0"
+    "@fabric/core": "FabricLabs/fabric#feature/v0.1.0-RC1",
+    "matrix-js-sdk": "30.3.0"
   },
   "devDependencies": {
     "mocha": "10.0.0"
