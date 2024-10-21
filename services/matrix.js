@@ -10,6 +10,9 @@ const Hash256 = require('@fabric/core/types/hash256');
 const Service = require('@fabric/core/types/service');
 const Message = require('@fabric/core/types/message');
 
+// Logging
+const { logger } = require('matrix-js-sdk/lib/logger');
+
 /**
  * Service for interacting with Matrix.
  * @augments Service
@@ -28,11 +31,17 @@ class Matrix extends Service {
     // Assign defaults
     this.settings = Object.assign({
       alias: 'FABRIC',
+      autojoin: true,
       handle: '@fabric:fabric.pub',
       name: '@fabric/matrix',
       path: './stores/matrix',
       homeserver: 'https://fabric.pub',
       coordinator: '!pPjIUAOkwmgXeICrzT:fabric.pub',
+      constraints: {
+        sync: {
+          limit: 10000
+        }
+      },
       token: null,
       connect: true
     }, this.settings, settings);
@@ -59,10 +68,10 @@ class Matrix extends Service {
     return this;
   }
 
-  get id () {
+  /* get id () {
     const actor = this._ensureUser({ id: this.settings.handle });
     return actor.id;
-  }
+  } */
 
   get status () {
     return this._state.status;
@@ -99,6 +108,65 @@ class Matrix extends Service {
     });
   }
 
+  async _getAgentDisplayName () {
+    const user = await this.client.getProfileInfo(this.settings.handle);
+    return user.displayname;
+  }
+
+  async _getEvent (eventID) {
+    let rooms = this.client.getRooms();
+    let specificEvent = null;
+
+    // Deep search
+    for (let i = rooms.length - 1; i >= 0; i--) {
+      let room = rooms[i];
+      let timeline = room.timeline;
+
+      for (let j = timeline.length - 1; j >= 0; j--) {
+        let event = timeline[j];
+        if (event.getId() === eventID) {
+          specificEvent = event;
+          break;
+        }
+      }
+
+      if (specificEvent) break;
+    }
+
+    if (specificEvent) {
+      return specificEvent;
+    } else {
+      return null;
+    }
+  }
+
+  async _getReactions (eventID) {
+    const reactions = [];
+    const rooms = this.client.getRooms();
+
+    for (let i = rooms.length - 1; i >= 0; i--) {
+      const room = rooms[i];
+      const timeline = room.timeline;
+
+      for (let j = timeline.length - 1; j >= 0; j--) {
+        const event = timeline[j];
+        if (event.getType() === 'm.reaction' && event.event.content['m.relates_to'] && event.event.content['m.relates_to'].event_id === eventID) {
+          reactions.push({
+            userId: event.getSender(),
+            key: event.event.content['m.relates_to'].key,
+          });
+        }
+      }
+    }
+
+    return reactions;
+  }
+
+  async _getRoomMembers (roomID) {
+    const rooms = this.client.getJoinedRooms();
+    return rooms;
+  }
+
   async _handleException (exception) {
     console.error('[SERVICES:MATRIX]', 'Exception:', exception);
   }
@@ -123,6 +191,7 @@ class Matrix extends Service {
   }
 
   async _react (eventID, emoji) {
+    const event = await this._getEvent(eventID);
     const reactionContent = {
       'm.relates_to': {
         'rel_type': 'm.annotation',
@@ -131,7 +200,7 @@ class Matrix extends Service {
       }
     };
 
-    const result = await this.client.sendEvent(this.settings.coordinator, 'm.reaction', reactionContent);
+    const result = await this.client.sendEvent(event.event.room_id, 'm.reaction', reactionContent);
 
     return {
       object: {
@@ -141,7 +210,8 @@ class Matrix extends Service {
   }
 
   async _redact (eventID) {
-    this.client.redactEvent(this.settings.coordinator, eventID);
+    const event = await this._getEvent(eventID);
+    this.client.redactEvent(event.event.room_id, eventID);
   }
 
   /**
@@ -222,17 +292,23 @@ class Matrix extends Service {
     return actor.data;
   }
 
-  async _send (msg) {
+  async _send (msg, channel = this.settings.coordinator) {
+    console.debug('called _send:', msg, channel);
     const content = {
-      body: (msg && msg.object) ? msg.object.content : msg.object,
+      body: (msg && msg.object) ? (msg.object.content) ? msg.object.content : msg.object : msg.object,
       msgtype: 'm.text'
     };
+    console.debug('sending to matrix:', content);
 
-    const result = await this.client.sendEvent(this.settings.coordinator, 'm.room.message', content, '');
+    const result = await this.client.sendEvent(channel, 'm.room.message', content, '');
 
     return {
       matrix: result
     };
+  }
+
+  async _setAgentDisplayName (name) {
+    return this.client.setDisplayName(name);
   }
 
   async login (username, password) {
@@ -278,6 +354,13 @@ class Matrix extends Service {
 
   async _handleMatrixMessage (msg) {
     const actor = this._ensureUser({ id: msg.event.sender });
+
+    // ## Fabric API
+    // Interact with the Fabric network using a local, message-based API.
+    // Activity Stream
+    // const actor = new Actor({ name: `matrix/users/${message.author.id}` });
+    const target = new Actor({ name: `matrix/channels/${msg.channel.id}` });
+
     switch (msg.getType()) {
       case 'm.room.message':
         this.emit('activity', {
@@ -285,7 +368,10 @@ class Matrix extends Service {
           object: {
             content: msg.event.content.body
           },
-          target: `/rooms/${msg.event.room_id}`
+          target: {
+            id: target.id,
+            path: `/rooms/${msg.event.room_id}`
+          }
         });
         break;
       default:
@@ -309,22 +395,39 @@ class Matrix extends Service {
     }
   }
 
-  async _handleRoomTimeline (event, room, toStartOfTimeline) {
-    this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
-    const actor = this._ensureUser({ id: event.event.sender });
-    switch (event.getType()) {
+  async _handleRoomTimeline (message, room, toStartOfTimeline) {
+    console.log('timeline event:', message.event/*, room*/);
+    // this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
+    const actor = this._ensureUser({ id: message.event.sender });
+    if (message.event.sender == this.settings.handle) return;
+
+    // ## Fabric API
+    // Interact with the Fabric network using a local, message-based API.
+    // Activity Stream
+    // const actor = new Actor({ name: `matrix/users/${message.author.id}` });
+    const target = new Actor({ name: `matrix/channels/${room.roomId}` });
+
+    switch (message.getType()) {
       case 'm.room.message':
         await this._syncState();
         this.emit('activity', {
-          actor: actor.id,
+          actor: {
+            id: actor.id,
+            username: message.event.sender,
+            ref: message.event.sender
+          },
           object: {
-            id: event.event.event_id,
-            content: event.event.content.body
+            id: message.event.event_id,
+            content: message.event.content.body
+          },
+          target: {
+            id: target.id,
+            path: `/rooms/${room.roomId}`
           }
         });
         break;
       default:
-        this.emit('warning', `Unhandled Matrix message type: ${event.getType()}`);
+        this.emit('warning', `Unhandled Matrix message type: ${message.getType()}`);
         break;
     }
   }
@@ -348,6 +451,7 @@ class Matrix extends Service {
   async _handlePreparedEvent (status) {
     this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
     await this._syncState();
+    this.emit('ready');
   }
 
   async _publishState (state) {
@@ -371,6 +475,8 @@ class Matrix extends Service {
     this.status = 'STARTING';
     this.emit('log', '[SERVICES:MATRIX] Starting...');
 
+    if (!this.settings.debug) logger.disableAll();
+
     const user = {
       pubkey: (this.settings.username) ? this.settings.username : this.key.pubkey,
       password: this.settings.password
@@ -383,12 +489,19 @@ class Matrix extends Service {
 
     // this.client.on('Room.timeline', this._handleRoomTimeline.bind(this));
 
+    // TODO: re-evaluate registration flow inside this function
     // await this._registerActor(user);
 
     if (this.settings.connect) {
-      await this.client.startClient({ initialSyncLimit: 10 });
+      await this.client.startClient({ initialSyncLimit: this.settings.constraints.sync.limit });
       await this.client.joinRoom(this.settings.coordinator);
     }
+
+    this.client.on('RoomMember.membership', (event, member) => {
+      if (this.settings.autojoin && member.membership === 'invite' && member.userId === this.settings.handle) {
+        this.client.joinRoom(member.roomId);
+      }
+    });
 
     this.status = 'STARTED';
     this.emit('log', '[SERVICES:MATRIX] Started!');
