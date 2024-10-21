@@ -10,6 +10,9 @@ const Hash256 = require('@fabric/core/types/hash256');
 const Service = require('@fabric/core/types/service');
 const Message = require('@fabric/core/types/message');
 
+// Logging
+const { logger } = require('matrix-js-sdk/lib/logger');
+
 /**
  * Service for interacting with Matrix.
  * @augments Service
@@ -291,7 +294,7 @@ class Matrix extends Service {
 
   async _send (msg, channel = this.settings.coordinator) {
     const content = {
-      body: (msg && msg.object) ? msg.object.content : msg.object,
+      body: (msg && msg.object) ? (msg.object.content) ? msg.object.content : msg.object : msg.object,
       msgtype: 'm.text'
     };
 
@@ -349,6 +352,13 @@ class Matrix extends Service {
 
   async _handleMatrixMessage (msg) {
     const actor = this._ensureUser({ id: msg.event.sender });
+
+    // ## Fabric API
+    // Interact with the Fabric network using a local, message-based API.
+    // Activity Stream
+    // const actor = new Actor({ name: `matrix/users/${message.author.id}` });
+    const target = new Actor({ name: `matrix/channels/${msg.channel.id}` });
+
     switch (msg.getType()) {
       case 'm.room.message':
         this.emit('activity', {
@@ -356,7 +366,10 @@ class Matrix extends Service {
           object: {
             content: msg.event.content.body
           },
-          target: `/rooms/${msg.event.room_id}`
+          target: {
+            id: target.id,
+            path: `/rooms/${msg.event.room_id}`
+          }
         });
         break;
       default:
@@ -380,24 +393,38 @@ class Matrix extends Service {
     }
   }
 
-  async _handleRoomTimeline (event, room, toStartOfTimeline) {
-    // console.log('timeline event:', event.event, room);
+  async _handleRoomTimeline (message, room, toStartOfTimeline) {
     // this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
-    const actor = this._ensureUser({ id: event.event.sender });
-    switch (event.getType()) {
+    const actor = this._ensureUser({ id: message.event.sender });
+    if (message.event.sender == this.settings.handle) return;
+
+    // ## Fabric API
+    // Interact with the Fabric network using a local, message-based API.
+    // Activity Stream
+    // const actor = new Actor({ name: `matrix/users/${message.author.id}` });
+    const target = new Actor({ name: `matrix/channels/${room.roomId}` });
+
+    switch (message.getType()) {
       case 'm.room.message':
         await this._syncState();
         this.emit('activity', {
-          actor: actor.id,
-          object: {
-            id: event.event.event_id,
-            content: event.event.content.body
+          actor: {
+            id: actor.id,
+            username: message.event.sender,
+            ref: message.event.sender
           },
-          target: `/rooms/${room.roomId}`
+          object: {
+            id: message.event.event_id,
+            content: message.event.content.body
+          },
+          target: {
+            id: target.id,
+            path: `/rooms/${room.roomId}`
+          }
         });
         break;
       default:
-        this.emit('warning', `Unhandled Matrix message type: ${event.getType()}`);
+        this.emit('warning', `Unhandled Matrix message type: ${message.getType()}`);
         break;
     }
   }
@@ -444,6 +471,8 @@ class Matrix extends Service {
   async start () {
     this.status = 'STARTING';
     this.emit('log', '[SERVICES:MATRIX] Starting...');
+
+    logger.disableAll();
 
     const user = {
       pubkey: (this.settings.username) ? this.settings.username : this.key.pubkey,
