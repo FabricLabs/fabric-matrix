@@ -68,10 +68,10 @@ class Matrix extends Service {
     return this;
   }
 
-  get id () {
+  /* get id () {
     const actor = this._ensureUser({ id: this.settings.handle });
     return actor.id;
-  }
+  } */
 
   get status () {
     return this._state.status;
@@ -293,10 +293,12 @@ class Matrix extends Service {
   }
 
   async _send (msg, channel = this.settings.coordinator) {
+    console.debug('called _send:', msg, channel);
     const content = {
       body: (msg && msg.object) ? (msg.object.content) ? msg.object.content : msg.object : msg.object,
       msgtype: 'm.text'
     };
+    console.debug('sending to matrix:', content);
 
     const result = await this.client.sendEvent(channel, 'm.room.message', content, '');
 
@@ -394,6 +396,7 @@ class Matrix extends Service {
   }
 
   async _handleRoomTimeline (message, room, toStartOfTimeline) {
+    console.log('timeline event:', message.event/*, room*/);
     // this.emit('debug', `Matrix Timeline Event: ${JSON.stringify(event, null, '  ')}`);
     const actor = this._ensureUser({ id: message.event.sender });
     if (message.event.sender == this.settings.handle) return;
@@ -472,7 +475,7 @@ class Matrix extends Service {
     this.status = 'STARTING';
     this.emit('log', '[SERVICES:MATRIX] Starting...');
 
-    logger.disableAll();
+    if (!this.settings.debug) logger.disableAll();
 
     const user = {
       pubkey: (this.settings.username) ? this.settings.username : this.key.pubkey,
