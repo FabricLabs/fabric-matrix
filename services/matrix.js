@@ -167,6 +167,11 @@ class Matrix extends Service {
     return rooms;
   }
 
+  async _getRoomDetail (roomID) {
+    const room = await this.client.getRoom(roomID);
+    return room;
+  }
+
   async _handleException (exception) {
     console.error('[SERVICES:MATRIX]', 'Exception:', exception);
   }
@@ -290,6 +295,15 @@ class Matrix extends Service {
     this.emit('actor', actor.id);
 
     return actor.data;
+  }
+
+  async _replayChannelHistory (channelID) {
+    const room = await this.client.getRoom(channelID);
+    const timeline = await this.client.getLiveTimeline(room.roomId);
+    for (let i = timeline.length - 1; i >= 0; i--) {
+      // const message = timeline[i];
+      this.emit('replay', timeline[i]);
+    }
   }
 
   async _send (msg, channel = this.settings.coordinator) {
