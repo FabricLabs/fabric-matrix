@@ -30,7 +30,7 @@
   "homepage": "https://github.com/FabricLabs/fabric-matrix#readme",
   "dependencies": {
     "@fabric/core": "FabricLabs/fabric#feature/v0.1.0-RC1",
-    "matrix-js-sdk": "=33.1.0"
+    "matrix-js-sdk": "=32.4.0"
   },
   "devDependencies": {
     "mocha": "=10.0.0"
