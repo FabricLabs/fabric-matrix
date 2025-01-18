@@ -177,8 +177,8 @@ class Matrix extends Service {
   }
 
   async _listPublicRooms () {
-    const rooms = await this.client.publicRooms();
-    return rooms;
+    const roomlist = await this.client.publicRooms({ limit: 200 });
+    return Object.values(roomlist.chunk);
   }
 
   async _queryServerForRoomUsers () {
