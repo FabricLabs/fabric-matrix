@@ -405,7 +405,6 @@ class Matrix extends Service {
       this.emit('error', Message.fromVector(['GenericError', {
         message: `Unhandled sync event state: ${status}`
       }]));
-      process.exit();
     }
   }
 
